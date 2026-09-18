@@ -1,7 +1,17 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
+import streamlit as st
 
+st.sidebar.title("Navigation")
+page = st.sidebar.radio("Go to", ["Sales Dashboard", "Asset Consolidator"])
+
+if page == "Sales Dashboard":
+    st.title("Sales Analytics Dashboard")
+    # Dashboard code runs here
+elif page == "Asset Consolidator":
+    st.title("Asset Consolidator")
+    # Consolidator code runs here
 st.set_page_config(page_title="Operations & Analytics Engine", layout="wide")
 
 st.title("📊 Enterprise Operational & Sales Analytics Engine")
