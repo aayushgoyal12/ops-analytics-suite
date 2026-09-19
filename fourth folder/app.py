@@ -4,8 +4,15 @@ import pandas as pd
 from datetime import date
 import smtplib
 from email.mime.text import MIMEText
+from supabase import create_client, Client
+
 
 # Database Setup
+# Exact Supabase Project Settings -> API se copy karo
+SUPABASE_URL = "https://nrhwruxrcdskfmhdyoow.supabase.co"  # Aapka Project URL
+SUPABASE_KEY = "sb_publishable_EDJzm21mydzHYJUS7VS0eQ_roRIIThU"  # Aapki Anon Key
+
+supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 conn = sqlite3.connect("compliance_tracker.db", check_same_thread=False)
 c = conn.cursor()
 
