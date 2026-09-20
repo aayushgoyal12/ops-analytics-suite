@@ -2,15 +2,21 @@ import streamlit as st
 from supabase import create_client, Client
 import razorpay
 import streamlit.components.v1 as components
+import json
+import pandas as pd
+from io import BytesIO
+from google import genai
 
 # --- Secrets Initialization ---
 SUPABASE_URL = st.secrets["SUPABASE_URL"]
 SUPABASE_KEY = st.secrets["SUPABASE_KEY"]
 RAZORPAY_KEY_ID = st.secrets["RAZORPAY_KEY_ID"]
 RAZORPAY_KEY_SECRET = st.secrets["RAZORPAY_KEY_SECRET"]
+GEMINI_API_KEY = st.secrets.get("GEMINI_API_KEY", "")
 
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 rzp_client = razorpay.Client(auth=(RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET))
+ai_client = genai.Client(api_key=GEMINI_API_KEY) if GEMINI_API_KEY else None
 
 # --- Session Management ---
 if "user" not in st.session_state:
@@ -28,9 +34,11 @@ if st.session_state.user:
     credit_data = supabase.table("user_credits").select("credits_remaining").eq("user_id", user_id).execute()
     
     if not credit_data.data:
-        # Initialize 0 credits for new user
-        supabase.table("user_credits").insert({"user_id": user_id, "credits_remaining": 0}).execute()
-        credits = 0
+        try:
+            supabase.table("user_credits").upsert({"user_id": user_id, "credits_remaining": 0}).execute()
+            credits = 0
+        except Exception:
+            credits = 0
     else:
         credits = credit_data.data[0]["credits_remaining"]
 
@@ -66,7 +74,7 @@ if st.session_state.user:
             "order_id": "{order['id']}",
             "prefill": {{ "email": "{user_email}" }},
             "handler": function (response){{
-                alert("Payment Successful! You can now update your credits.");
+                alert("Payment Successful! Click '+ Add Credits' below.");
             }},
             "theme": {{ "color": "#2563EB" }}
         }};
@@ -76,7 +84,6 @@ if st.session_state.user:
         """
         components.html(razorpay_html, height=0)
 
-    # Manual Credit Add Button for Testing & Top-Up Simulation
     if st.sidebar.button(f"+ Add {added_credits} Credits (After Payment)"):
         new_balance = credits + added_credits
         supabase.table("user_credits").update({"credits_remaining": new_balance}).eq("user_id", user_id).execute()
@@ -88,11 +95,11 @@ if st.session_state.user:
         st.rerun()
 
     # --- MAIN DASHBOARD APP ---
-    st.title("💼 Accounting Client Document Hub")
-    st.write("Upload client documents (invoices, receipts, sheets) for AI processing.")
+    st.title("💼 AI Invoice & Receipt Extractor")
+    st.write("Upload client invoices or receipts to automatically extract structured data to Excel.")
 
-    st.subheader("📄 Document Processor")
-    uploaded_file = st.file_uploader("Upload an invoice or document (PDF / Images / Excel)", type=["pdf", "png", "jpg", "jpeg", "xlsx"])
+    st.subheader("📄 Document Upload")
+    uploaded_file = st.file_uploader("Upload an invoice/receipt (PNG, JPG, JPEG, PDF)", type=["png", "jpg", "jpeg", "pdf"])
 
     if uploaded_file is not None:
         st.write(f"**Selected File:** {uploaded_file.name}")
@@ -100,18 +107,64 @@ if st.session_state.user:
         if st.button("🚀 Process & Extract Data"):
             if credits < 1:
                 st.error("❌ Out of credits! Please top-up from the sidebar to continue.")
+            elif not ai_client:
+                st.error("❌ GEMINI_API_KEY is not configured in secrets!")
             else:
-                with st.spinner("Processing document..."):
-                    # Deduct 1 credit in Supabase
-                    new_credit_balance = credits - 1
-                    supabase.table("user_credits").update({"credits_remaining": new_credit_balance}).eq("user_id", user_id).execute()
-                    
-                    # Process success response
-                    st.success("✅ Document processed successfully!")
-                    st.info(f"1 Credit deducted. Remaining credits: **⚡ {new_credit_balance}**")
-                    
-                    # Refresh app to update sidebar credit widget immediately
-                    st.rerun()
+                with st.spinner("Analyzing document with AI..."):
+                    try:
+                        bytes_data = uploaded_file.getvalue()
+                        mime_type = uploaded_file.type
+
+                        prompt = """
+                        Extract data from this invoice/receipt into a strict JSON object with these exact keys:
+                        - "vendor_name": Name of seller/vendor
+                        - "invoice_number": Invoice or receipt number
+                        - "date": Invoice date (YYYY-MM-DD)
+                        - "gstin": GST number if available
+                        - "taxable_value": Total value before tax
+                        - "tax_amount": Tax/GST amount
+                        - "total_amount": Final total amount
+                        Return ONLY raw JSON, no markdown formatting.
+                        """
+
+                        response = ai_client.models.generate_content(
+                            model="gemini-2.5-flash",
+                            contents=[
+                                {"mime_type": mime_type, "data": bytes_data},
+                                prompt
+                            ]
+                        )
+
+                        clean_text = response.text.replace("```json", "").replace("```", "").strip()
+                        extracted_json = json.loads(clean_text)
+
+                        # Deduct 1 credit in Supabase
+                        new_credit_balance = credits - 1
+                        supabase.table("user_credits").update({"credits_remaining": new_credit_balance}).eq("user_id", user_id).execute()
+
+                        st.success("✅ Extraction Complete!")
+                        st.info(f"1 Credit deducted. Remaining credits: **⚡ {new_credit_balance}**")
+
+                        # Display Data in Pandas Table
+                        df = pd.DataFrame([extracted_json])
+                        st.subheader("📊 Extracted Data Preview")
+                        st.dataframe(df, use_container_width=True)
+
+                        # Export to Excel Download Button
+                        output = BytesIO()
+                        with pd.ExcelWriter(output, engine='openpyxl') as writer:
+                            df.to_excel(writer, index=False, sheet_name='Extracted Data')
+                        excel_data = output.getvalue()
+
+                        st.download_button(
+                            label="📥 Download Excel Report",
+                            data=excel_data,
+                            file_name=f"Extracted_{uploaded_file.name}.xlsx",
+                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                        )
+
+                    except Exception as e:
+                        st.error(f"Error processing file: {e}")
 
 # --- NOT LOGGED IN ---
 else:
