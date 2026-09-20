@@ -6,6 +6,8 @@ import json
 import pandas as pd
 from io import BytesIO
 from google import genai
+from google import genai
+from google.genai import types
 
 # --- Secrets Initialization ---
 SUPABASE_URL = st.secrets["SUPABASE_URL"]
@@ -126,14 +128,15 @@ if st.session_state.user:
                         - "total_amount": Final total amount
                         Return ONLY raw JSON, no markdown formatting.
                         """
+                        file_part = types.Part.from_bytes(
+                            data=bytes_data,
+                            mime_type=mime_type,
+                        )
 
                         response = ai_client.models.generate_content(
-                            model="gemini-2.5-flash",
-                            contents=[
-                                {"mime_type": mime_type, "data": bytes_data},
-                                prompt
-                            ]
-                        )
+                            model="gemini-3.6-flash",
+                            contents=[file_part, prompt]
+                        )  
 
                         clean_text = response.text.replace("```json", "").replace("```", "").strip()
                         extracted_json = json.loads(clean_text)
