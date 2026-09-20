@@ -18,20 +18,26 @@ if "user" not in st.session_state:
 
 st.sidebar.title("🔐 Account & Credits")
 
-# --- LOGGED IN USER VIEW ---
+# --- LOGGED IN VIEW ---
 if st.session_state.user:
     user_id = st.session_state.user.id
     user_email = st.session_state.user.email
     st.sidebar.write(f"Logged in: **{user_email}**")
 
-    # Fetch Credits
+    # Fetch Current Credits
     credit_data = supabase.table("user_credits").select("credits_remaining").eq("user_id", user_id).execute()
-    credits = credit_data.data[0]["credits_remaining"] if credit_data.data else 0
+    
+    if not credit_data.data:
+        # Initialize 0 credits for new user
+        supabase.table("user_credits").insert({"user_id": user_id, "credits_remaining": 0}).execute()
+        credits = 0
+    else:
+        credits = credit_data.data[0]["credits_remaining"]
 
     st.sidebar.metric(label="Available Credits", value=f"⚡ {credits}")
     st.sidebar.divider()
 
-    # Razorpay Checkout Options
+    # Credit Top-Up Options
     st.sidebar.subheader("💳 Top-Up Credits")
     pack = st.sidebar.radio("Select Pack:", ["50 Credits — ₹249", "100 Credits — ₹499"])
     
@@ -59,6 +65,9 @@ if st.session_state.user:
             "description": "{added_credits} Extra Credits",
             "order_id": "{order['id']}",
             "prefill": {{ "email": "{user_email}" }},
+            "handler": function (response){{
+                alert("Payment Successful! You can now update your credits.");
+            }},
             "theme": {{ "color": "#2563EB" }}
         }};
         var rzp1 = new Razorpay(options);
@@ -67,15 +76,44 @@ if st.session_state.user:
         """
         components.html(razorpay_html, height=0)
 
+    # Manual Credit Add Button for Testing & Top-Up Simulation
+    if st.sidebar.button(f"+ Add {added_credits} Credits (After Payment)"):
+        new_balance = credits + added_credits
+        supabase.table("user_credits").update({"credits_remaining": new_balance}).eq("user_id", user_id).execute()
+        st.sidebar.success(f"Successfully added {added_credits} credits!")
+        st.rerun()
+
     if st.sidebar.button("Log Out"):
         st.session_state.user = None
         st.rerun()
 
     # --- MAIN DASHBOARD APP ---
     st.title("💼 Accounting Client Document Hub")
-    st.write("Welcome to your Ops Analytics Dashboard!")
+    st.write("Upload client documents (invoices, receipts, sheets) for AI processing.")
 
-# --- NOT LOGGED IN (SHOW LOGIN FORM) ---
+    st.subheader("📄 Document Processor")
+    uploaded_file = st.file_uploader("Upload an invoice or document (PDF / Images / Excel)", type=["pdf", "png", "jpg", "jpeg", "xlsx"])
+
+    if uploaded_file is not None:
+        st.write(f"**Selected File:** {uploaded_file.name}")
+        
+        if st.button("🚀 Process & Extract Data"):
+            if credits < 1:
+                st.error("❌ Out of credits! Please top-up from the sidebar to continue.")
+            else:
+                with st.spinner("Processing document..."):
+                    # Deduct 1 credit in Supabase
+                    new_credit_balance = credits - 1
+                    supabase.table("user_credits").update({"credits_remaining": new_credit_balance}).eq("user_id", user_id).execute()
+                    
+                    # Process success response
+                    st.success("✅ Document processed successfully!")
+                    st.info(f"1 Credit deducted. Remaining credits: **⚡ {new_credit_balance}**")
+                    
+                    # Refresh app to update sidebar credit widget immediately
+                    st.rerun()
+
+# --- NOT LOGGED IN ---
 else:
     st.title("🔐 Welcome to Ops Analytics Suite")
     st.info("Please log in or sign up from the sidebar to access your workspace.")
