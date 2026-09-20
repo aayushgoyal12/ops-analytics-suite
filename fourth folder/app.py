@@ -6,11 +6,45 @@ import time
 from google import genai
 from google.genai import types
 
-# Initialize Gemini Client
-api_key = st.secrets["GEMINI_API_KEY"]
-ai_client = genai.Client(api_key=api_key)
+# 1. Page Config (Wide layout for clean UI)
+st.set_page_config(
+    page_title="Ops Analytics Suite | AI Invoice Batch Processor",
+    page_icon="🧾",
+    layout="wide"
+)
 
-# --- Multi-File Uploader ---
+# 2. Initialize Gemini Client safely
+try:
+    api_key = st.secrets["GEMINI_API_KEY"]
+    ai_client = genai.Client(api_key=api_key)
+except Exception as e:
+    st.error(f"API Key error: {e}")
+
+# 3. Session State Setup for Credits
+if "credits" not in st.session_state:
+    st.session_state["credits"] = 100  # Default credits balance
+
+# 4. Sidebar Layout
+with st.sidebar:
+    st.title("⚡ Ops Analytics")
+    st.caption("AI-Powered Document Processing")
+    st.divider()
+    
+    st.subheader("💳 Credit Balance")
+    st.metric(label="Available Credits", value=st.session_state["credits"])
+    st.info("1 Credit = 1 Document Extracted")
+    
+    st.divider()
+    st.markdown("### 🎯 SaaS Features")
+    st.markdown("- Multi-PDF Batch Processing\n- Auto-Merge Master Excel Export\n- Tally & Zoho Ready Format")
+
+# 5. Main Dashboard Header
+st.title("🧾 Master Invoice Batch Extractor")
+st.write("Upload multiple invoices or receipts at once to auto-extract details into a single consolidated Master Excel report.")
+
+st.divider()
+
+# 6. Multi-File Uploader Block
 uploaded_files = st.file_uploader(
     "Upload multiple Invoices/Receipts (PDF, PNG, JPG)",
     type=["pdf", "png", "jpg", "jpeg"],
@@ -19,14 +53,10 @@ uploaded_files = st.file_uploader(
 
 if uploaded_files:
     num_files = len(uploaded_files)
-    st.info(f"Selected {num_files} document(s). Total credits required: {num_files}")
+    st.info(f"📁 Selected **{num_files} document(s)**. Total credits required: **{num_files}**")
     
-    if st.button("🚀 Process All Documents"):
-        # Safely fetch user credits integer
-        try:
-            available_credits = int(st.session_state.get("credits", 10))
-        except Exception:
-            available_credits = 10
+    if st.button("🚀 Process All Documents", type="primary"):
+        available_credits = st.session_state["credits"]
 
         if available_credits < num_files:
             st.error(f"Insufficient credits! You need {num_files} credits, but only have {available_credits} left.")
@@ -36,7 +66,7 @@ if uploaded_files:
             status_text = st.empty()
 
             for idx, uploaded_file in enumerate(uploaded_files):
-                status_text.text(f"Processing {uploaded_file.name} ({idx+1}/{num_files})...")
+                status_text.text(f"Processing ({idx+1}/{num_files}): {uploaded_file.name}...")
                 bytes_data = uploaded_file.read()
                 mime_type = uploaded_file.type
 
@@ -56,7 +86,7 @@ if uploaded_files:
                 Return ONLY raw JSON, no markdown formatting.
                 """
 
-                # Retry logic for 503 errors
+                # Retry logic for temporary API overloads
                 max_retries = 3
                 for attempt in range(max_retries):
                     try:
@@ -78,30 +108,18 @@ if uploaded_files:
                 progress_bar.progress((idx + 1) / num_files)
                 time.sleep(1)
 
-            # Credit deduction logic
+            # Deduct Credits
             if extracted_records:
-                new_credit_balance = available_credits - len(extracted_records)
-                
-                # Update Supabase
-                try:
-                    user_id = st.session_state.get("user_id")
-                    if user_id:
-                        supabase.table("user_credits").update(
-                            {"credits_remaining": new_credit_balance}
-                        ).eq("user_id", user_id).execute()
-                    st.session_state["credits"] = new_credit_balance
-                except Exception as e:
-                    st.warning(f"Credits updated locally. Supabase note: {e}")
+                st.session_state["credits"] -= len(extracted_records)
+                st.success(f"✅ Processing Complete! Successfully extracted {len(extracted_records)} invoices.")
 
-                st.success(f"Processing Complete! Deducted {len(extracted_records)} credits.")
-
-                # Summary Table & Export
+                # Master Data Table & Download
                 df = pd.DataFrame(extracted_records)
                 cols = ["file_name", "vendor_name", "date", "gstin", "taxable_value", "tax_amount", "total_amount"]
                 df = df[[c for c in cols if c in df.columns]]
                 
-                st.subheader("📊 Master Extracted Summary")
-                st.dataframe(df)
+                st.subheader("📊 Master Summary Table")
+                st.dataframe(df, use_container_width=True)
 
                 buffer = io.BytesIO()
                 with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
@@ -111,5 +129,6 @@ if uploaded_files:
                     label="📥 Download Master Excel Report",
                     data=buffer.getvalue(),
                     file_name="Master_Invoice_Summary.xlsx",
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    type="primary"
                 )
