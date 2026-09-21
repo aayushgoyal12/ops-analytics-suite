@@ -1,4 +1,71 @@
 import streamlit as st
+import streamlit as st
+
+# =========================================================
+# 1. CUSTOM DARK SAAS THEME (CSS)
+# =========================================================
+st.markdown("""
+<style>
+.stApp {
+    background: radial-gradient(circle at 15% 10%, rgba(37, 99, 235, 0.10), transparent 28%),
+                radial-gradient(circle at 85% 20%, rgba(59, 130, 246, 0.07), transparent 25%),
+                #0f172a;
+    color: #e5e7eb;
+    font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+.block-container { max-width: 1400px; padding-top: 2.5rem; padding-bottom: 4rem; }
+h1 { color: #f8fafc !important; font-size: 2.35rem !important; font-weight: 750 !important; letter-spacing: -0.035em !important; }
+p, label, .stMarkdown { color: #cbd5e1; }
+.subtitle { color: #94a3b8; font-size: 0.98rem; margin-top: -0.25rem; margin-bottom: 1.75rem; }
+
+/* Buttons */
+.stButton > button {
+    width: 100%; min-height: 44px;
+    background: linear-gradient(135deg, #2563eb 0%, #3b82f6 100%) !important;
+    color: #ffffff !important; border: 1px solid rgba(96, 165, 250, 0.45) !important;
+    border-radius: 10px !important; font-weight: 650 !important;
+    box-shadow: 0 8px 25px rgba(37, 99, 235, 0.22) !important;
+    transition: transform 0.18s ease, box-shadow 0.18s ease !important;
+}
+.stButton > button:hover { transform: translateY(-1px); box-shadow: 0 10px 30px rgba(37, 99, 235, 0.28) !important; }
+
+/* Metric Cards */
+.stat-card {
+    background: linear-gradient(145deg, rgba(30, 41, 59, 0.92), rgba(15, 23, 42, 0.95));
+    border: 1px solid rgba(148, 163, 184, 0.13); border-radius: 16px; padding: 20px 22px;
+}
+.stat-label { color: #94a3b8; font-size: 0.82rem; font-weight: 550; text-transform: uppercase; margin-bottom: 9px; }
+.stat-value { color: #f8fafc; font-size: 1.9rem; font-weight: 750; }
+.stat-change { margin-top: 11px; color: #60a5fa; font-size: 0.78rem; font-weight: 600; }
+
+/* File Uploader styling */
+[data-testid="stFileUploader"] section {
+    background: linear-gradient(145deg, rgba(30, 41, 59, 0.72), rgba(15, 23, 42, 0.88));
+    border: 1.5px dashed rgba(96, 165, 250, 0.45) !important; border-radius: 18px !important;
+}
+
+#MainMenu, footer { visibility: hidden; }
+header[data-testid="stHeader"] { background: transparent; }
+</style>
+""", unsafe_allow_html=True)
+
+# =========================================================
+# 2. DASHBOARD HEADER & METRICS
+# =========================================================
+st.markdown("""
+<h1>Accounting Document Intelligence</h1>
+<div class="subtitle">Upload invoices, receipts, and accounting documents for automated extraction and Excel reconciliation.</div>
+""", unsafe_allow_html=True)
+
+col1, col2, col3 = st.columns(3)
+with col1:
+    st.markdown('<div class="stat-card"><div class="stat-label">Batch Speed</div><div class="stat-value">~10s</div><div class="stat-change">⚡ Auto OCR Engine</div></div>', unsafe_allow_html=True)
+with col2:
+    st.markdown('<div class="stat-card"><div class="stat-label">Accuracy</div><div class="stat-value">99.2%</div><div class="stat-change">🎯 Tax & GST Validated</div></div>', unsafe_allow_html=True)
+with col3:
+    st.markdown('<div class="stat-card"><div class="stat-label">Export Format</div><div class="stat-value">Excel (.xlsx)</div><div class="stat-change">📊 Master Ledger Ready</div></div>', unsafe_allow_html=True)
+
+st.markdown("<br>", unsafe_allow_html=True)
 import pandas as pd
 import json
 import io
